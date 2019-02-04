@@ -26,6 +26,10 @@ public enum CachePolicy {
 ///   - error: An error that indicates why the mutation failed, or `nil` if the mutation was succesful.
 public typealias OperationResultHandler<Operation: GraphQLOperation> = (_ result: GraphQLResult<Operation.Data>?, _ error: Error?) -> Void
 
+public typealias Progress = Int8
+
+public typealias OperationProgressHandler = (_ progress: Progress) -> Void
+
 /// The `ApolloClient` class provides the core API for Apollo. This API provides methods to fetch and watch queries, and to perform mutations.
 public class ApolloClient {
   let networkTransport: NetworkTransport
@@ -137,7 +141,27 @@ public class ApolloClient {
   }
   
     
-  fileprivate func send<Operation: GraphQLOperation>(operation: Operation, context: UnsafeMutableRawPointer?, handlerQueue: DispatchQueue, resultHandler: OperationResultHandler<Operation>?) -> Cancellable {
+  
+  /// Performs a mutation by sending it to the server.
+  ///
+  /// - Parameters:
+  ///   - mutation: The mutation to perform.
+  ///   - files: A list of files to send as a multipart request.
+  ///   - queue: A dispatch queue on which the result handler will be called. Defaults to the main queue.
+  ///   - progressHandler: A closure to call periodically as the request is sent.
+  ///   - resultHandler: An optional closure that is called when mutation results are available or when an error occurs.
+  ///   - result: The result of the performed mutation, or `nil` if an error occurred.
+  ///   - error: An error that indicates why the mutation failed, or `nil` if the mutation was succesful.
+  /// - Returns: An object that can be used to cancel an in progress mutation.
+  @discardableResult public func performUpload<Mutation: GraphQLMutation>(mutation: Mutation, files: [GraphQLFile]? = nil, queue: DispatchQueue = DispatchQueue.main, progressHandler: OperationProgressHandler? = nil, resultHandler: OperationResultHandler<Mutation>? = nil) -> Cancellable {
+    return _performUpload(mutation: mutation, files: files, queue: queue, progressHandler: progressHandler, resultHandler: resultHandler)
+  }
+  
+  func _performUpload<Mutation: GraphQLMutation>(mutation: Mutation, files: [GraphQLFile]? = nil, context: UnsafeMutableRawPointer? = nil, queue: DispatchQueue, progressHandler: OperationProgressHandler? = nil, resultHandler: OperationResultHandler<Mutation>?) -> Cancellable {
+    return send(operation: mutation, files: files, context: context, handlerQueue: queue, progressHandler: progressHandler, resultHandler: resultHandler)
+  }
+  
+  fileprivate func send<Operation: GraphQLOperation>(operation: Operation, files: [GraphQLFile]? = nil, context: UnsafeMutableRawPointer?, handlerQueue: DispatchQueue, progressHandler: OperationProgressHandler? = nil, resultHandler: OperationResultHandler<Operation>?) -> Cancellable {
     func notifyResultHandler(result: GraphQLResult<Operation.Data>?, error: Error?) {
       guard let resultHandler = resultHandler else { return }
       
@@ -146,7 +170,15 @@ public class ApolloClient {
       }
     }
     
-    return networkTransport.send(operation: operation) { (response, error) in
+    func notifyProgressHandler(_ progress: Progress) {
+      guard let progressHandler = progressHandler else { return }
+      
+      handlerQueue.async {
+        progressHandler(progress)
+      }
+    }
+    
+    func completionHandler(_ response: GraphQLResponse<Operation>?, _ error: Error?) {
       guard let response = response else {
         notifyResultHandler(result: nil, error: error)
         return
@@ -154,17 +186,23 @@ public class ApolloClient {
       
       firstly {
         try response.parseResult(cacheKeyForObject: self.cacheKeyForObject)
-      }.andThen { (result, records) in
-        notifyResultHandler(result: result, error: nil)
-        
-        if let records = records {
-          self.store.publish(records: records, context: context).catch { error in
-            preconditionFailure(String(describing: error))
+        }.andThen { (result, records) in
+          notifyResultHandler(result: result, error: nil)
+          
+          if let records = records {
+            self.store.publish(records: records, context: context).catch { error in
+              preconditionFailure(String(describing: error))
+            }
           }
+        }.catch { error in
+          notifyResultHandler(result: nil, error: error)
         }
-      }.catch { error in
-        notifyResultHandler(result: nil, error: error)
-      }
+    }
+    
+    if (files != nil && !files!.isEmpty) {
+      return networkTransport.upload(operation: operation, files: files, progressHandler: notifyProgressHandler, completionHandler: completionHandler)
+    } else {
+      return networkTransport.send(operation: operation, completionHandler: completionHandler)
     }
   }
 }
