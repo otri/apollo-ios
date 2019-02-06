@@ -1,10 +1,10 @@
 class SessionDelegate: NSObject {
   class SessionDelegateTask {
     let completionHandler: (Data?, URLResponse?, Error?) -> Void
-    let progressHandler: ((Progress) -> Void)?
+    let progressHandler: ((OperationProgress) -> Void)?
     var data = Data()
     
-    init(completionHandler: @escaping  (Data?, URLResponse?, Error?) -> Void, progressHandler: ((Progress) -> Void)? = nil) {
+    init(completionHandler: @escaping  (Data?, URLResponse?, Error?) -> Void, progressHandler: ((OperationProgress) -> Void)? = nil) {
       self.completionHandler = completionHandler
       self.progressHandler = progressHandler
     }
@@ -17,7 +17,7 @@ class SessionDelegate: NSObject {
   private var tasks: [Int: SessionDelegateTask] = [:]
   private let lock = Mutex()
   
-  func add(task: URLSessionTask, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void, progressHandler: ((Progress) -> Void)? = nil) {
+  func add(task: URLSessionTask, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void, progressHandler: ((OperationProgress) -> Void)? = nil) {
     self.lock.lock()
     defer { self.lock.unlock() }
     
@@ -48,7 +48,7 @@ extension SessionDelegate: URLSessionTaskDelegate {
   func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
     if let sessionTask = self.get(task: task), let progressHandler = sessionTask.progressHandler {
       let progress = Float(totalBytesSent)/Float(totalBytesExpectedToSend)
-      progressHandler(Progress(progress * 100))
+      progressHandler(OperationProgress(progress * 100))
     }
   }
   

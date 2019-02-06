@@ -89,7 +89,7 @@ public class HTTPNetworkTransport: NetworkTransport {
   ///   - response: The response received from the server, or `nil` if an error occurred.
   ///   - error: An error that indicates why a request failed, or `nil` if the request was succesful.
   /// - Returns: An object that can be used to cancel an in progress request.
-  public func upload<Operation>(operation: Operation, files: [GraphQLFile]? = nil, progressHandler: ((Progress) -> Void)? = nil, completionHandler: @escaping (GraphQLResponse<Operation>?, Error?) -> Void) -> Cancellable {
+  public func upload<Operation>(operation: Operation, files: [GraphQLFile]? = nil, progressHandler: ((OperationProgress) -> Void)? = nil, completionHandler: @escaping (GraphQLResponse<Operation>?, Error?) -> Void) -> Cancellable {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     

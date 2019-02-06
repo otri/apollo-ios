@@ -26,9 +26,11 @@ public enum CachePolicy {
 ///   - error: An error that indicates why the mutation failed, or `nil` if the mutation was succesful.
 public typealias OperationResultHandler<Operation: GraphQLOperation> = (_ result: GraphQLResult<Operation.Data>?, _ error: Error?) -> Void
 
-public typealias Progress = Int8
+/// Represents a range of progress from 0-100
+public typealias OperationProgress = Int8
 
-public typealias OperationProgressHandler = (_ progress: Progress) -> Void
+/// Callback handler that is periodically called while the operation's data is transferred.
+public typealias OperationProgressHandler = (_ progress: OperationProgress) -> Void
 
 /// The `ApolloClient` class provides the core API for Apollo. This API provides methods to fetch and watch queries, and to perform mutations.
 public class ApolloClient {
@@ -170,7 +172,7 @@ public class ApolloClient {
       }
     }
     
-    func notifyProgressHandler(_ progress: Progress) {
+    func notifyProgressHandler(_ progress: OperationProgress) {
       guard let progressHandler = progressHandler else { return }
       
       handlerQueue.async {
